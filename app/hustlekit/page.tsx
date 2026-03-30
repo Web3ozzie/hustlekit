@@ -35,10 +35,13 @@ function HustleKitInnerPage() {
     hasToolsSub?: boolean;
   } | null>(null);
 
+  const [subscriptionDoc, setSubscriptionDoc] = useState<any | null>(null);
+
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (firebaseUser) => {
       if (!firebaseUser) {
         setUser(null);
+        setSubscriptionDoc(null);
         return;
       }
 
@@ -57,6 +60,15 @@ function HustleKitInnerPage() {
         email: firebaseUser.email ?? null,
         hasToolsSub: data?.hasToolsSub ?? false,
       });
+
+      // load tools subscription doc for this user
+      const subRef = doc(db, "toolSubs", firebaseUser.uid);
+      const subSnap = await getDoc(subRef);
+      if (subSnap.exists()) {
+        setSubscriptionDoc(subSnap.data());
+      } else {
+        setSubscriptionDoc(null);
+      }
     });
 
     return () => unsub();
@@ -105,6 +117,7 @@ function HustleKitInnerPage() {
     }
   }
 
+  // SINGLE return – everything below stays inside this
   return (
     <div className="min-h-screen bg-black text-white flex flex-col md:flex-row">
       {/* Sidebar */}
@@ -161,7 +174,7 @@ function HustleKitInnerPage() {
 
         {activeTab === "tools" && (
           user?.hasToolsSub ? (
-            <Tools />
+            <Tools expiresAt={subscriptionDoc?.expiresAt} />
           ) : (
             <div className="p-6 space-y-4">
               <h2 className="text-xl font-semibold">Unlock HustleKit Tools</h2>
@@ -196,19 +209,6 @@ function HustleKitInnerPage() {
     </div>
   );
 }
-
-export default function HustleKitPage() {
-  return (
-    <Suspense fallback={<div className="text-xs text-gray-400 p-4">Loading...</div>}>
-      <HustleKitInnerPage />
-    </Suspense>
-  );
-}
-type InvestmentsProps = {
-  myHustleId?: string;
-  openChatTab?: () => void;
-};
-
 function Investments({ myHustleId, openChatTab }: InvestmentsProps) {
   const [coins, setCoins] = React.useState<any[]>([]);
   const [category, setCategory] = React.useState("crypto");
@@ -479,31 +479,34 @@ function Investments({ myHustleId, openChatTab }: InvestmentsProps) {
 
       <div className="grid grid-cols-2 gap-4">
         {/* DIGITAL ASSETS */}
-        {category === "crypto" &&
-          coins.map((coin: any) => (
-            <div
-              key={coin.id}
-              className="bg-gray-900/70 backdrop-blur-lg p-4 rounded-2xl border border-gray-800 hover:border-gray-700 transition"
-            >
-              <div className="flex justify-between items-center">
-                <h3 className="text-gray-300">{coin.name}</h3>
-                <p className="text-white font-semibold">
-                  ${coin.current_price}
-                </p>
-              </div>
+{category === "crypto" &&
+  coins.map((coin) => (
+    <div
+      key={coin.id}
+      className="bg-gray-900/70 backdrop-blur-lg p-4 rounded-2xl border border-gray-800 hover:border-orange-500/60 transition-all"
+    >
+      <div className="flex justify-between items-center">
+        <h3 className="text-gray-300">{coin.name}</h3>
+        <p className="text-white font-semibold">
+          ${coin.current_price}
+        </p>
+      </div>
 
-              <p
-                className={`mt-2 ${
-                  coin.price_change_percentage_24h > 0
-                    ? "text-green-400"
-                    : "text-red-400"
-                }`}
-              >
-                {coin.price_change_percentage_24h.toFixed(2)}%
-              </p>
-            </div>
-          ))}
-
+      <p
+        className={`mt-2 ${
+          coin.price_change_percentage_24h > 0
+            ? "text-green-400"
+            : "text-red-400"
+        }`}
+      >
+        {coin.price_change_percentage_24h != null
+          ? coin.price_change_percentage_24h.toFixed(2)
+          : "0.00"}
+        %
+      </p>
+    </div>
+  ))
+}
         {/* STOCKS */}
         {category === "stocks" &&
           stocksData.map((item: any, index: number) => (
@@ -842,7 +845,11 @@ function Jobs() {
     </div>
   );
 }
-function Tools() {
+type ToolsProps = {
+  expiresAt?: { toMillis: () => number } | null; // Firestore Timestamp-like
+};
+
+function Tools({ expiresAt }: ToolsProps) {
   const [activeTool, setActiveTool] = useState<
     "bio" | "letter" | "invoice" | "profit" | "pitch" | "cv"
   >("bio");
@@ -917,6 +924,15 @@ function Tools() {
     if (savedCV) setGeneratedCV(savedCV);
     if (savedPitch) setOutput(savedPitch);
   }, []);
+
+  // countdown
+  const msLeft = expiresAt ? expiresAt.toMillis() - Date.now() : 0;
+  const isExpired = msLeft <= 0;
+  const daysLeft = Math.max(0, Math.floor(msLeft / (1000 * 60 * 60 * 24)));
+  const hoursLeft = Math.max(
+    0,
+    Math.floor((msLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+  );
 
   async function callAI(tool: string, payload: any) {
     try {
@@ -1043,10 +1059,10 @@ function Tools() {
   function generateCVCvPDF() {
     if (!generatedCV) return;
 
-const doc = new jsPDF();
-const margin = 20;
-const lineHeight = 6;
-let y = margin;
+    const doc = new jsPDF();
+    const margin = 20;
+    const lineHeight = 6;
+    let y = margin;
 
     const lines = generatedCV.split("\n");
     const [nameLine, addrLine, contactLine, ...rest] = lines;
@@ -1183,6 +1199,20 @@ let y = margin;
 
   return (
     <div className="space-y-6">
+      {/* countdown banner */}
+      <div>
+        {!isExpired ? (
+          <p className="text-xs text-gray-300">
+            Access ends in {daysLeft} days {hoursLeft} hours
+          </p>
+        ) : (
+          <p className="text-xs text-red-400">
+            Your 30‑day access has expired. Please renew to unlock tools.
+          </p>
+        )}
+      </div>
+
+      {/* header + error */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Tools & Generators</h2>
@@ -1753,9 +1783,6 @@ let y = margin;
     </div>
   );
 }
-  type ProfileProps = {
-  user: { username: string; hustleId: string };
-};
 
 function Profile({ user }: ProfileProps) {
   const [profileName, setProfileName] = useState(user.username);
@@ -1770,6 +1797,7 @@ function Profile({ user }: ProfileProps) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  
 
   async function saveProfile() {
     try {
@@ -2370,5 +2398,12 @@ function Chat({ myHustleId }: ChatProps) {
         </div>
       </div>
     </div>
+  );
+}
+export default function HustleKitPage() {
+  return (
+    <Suspense fallback={<div className="text-xs text-gray-400 p-4">Loading...</div>}>
+      <HustleKitInnerPage />
+    </Suspense>
   );
 }

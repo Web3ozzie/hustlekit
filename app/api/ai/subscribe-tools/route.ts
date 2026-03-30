@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
-  console.log("SUBSCRIBE-TOOLS HIT");
-
   try {
     const body = await req.json();
     const { userId, email } = body;
 
     if (!userId || !email) {
-      console.log("MISSING FIELDS", { userId, email });
       return NextResponse.json(
         { error: "Missing userId or email" },
         { status: 400 }
@@ -25,27 +22,25 @@ export async function POST(req: Request) {
         tx_ref: `tools-${userId}-${Date.now()}`,
         amount: 1500,
         currency: "NGN",
-        payment_plan: 156341, // your plan id
         customer: { email },
         redirect_url: `${process.env.NEXT_PUBLIC_APP_URL}/hustlekit?tab=tools`,
-        payment_options: "card,banktransfer,ussd,banktransfer_ng,account", // <-- here
+        payment_options: "card,banktransfer,ussd,banktransfer_ng,account",
       }),
     });
 
     const data = await res.json();
-    console.log("FLW RAW:", data);
 
-    if (data.status !== "success") {
-      console.error("FLW ERROR:", data);
+    if (data.status !== "success" || !data.data?.link) {
       return NextResponse.json(
         { error: data.message || "Could not start payment" },
         { status: 400 }
       );
     }
 
-    return NextResponse.json({ link: data.data.link });
+    const paymentLink = data.data.link as string;
+    return NextResponse.json({ link: paymentLink });
   } catch (e: any) {
-    console.error("FLW SUB ERROR:", e);
+    console.error("SUBSCRIBE-TOOLS ERROR:", e);
     return NextResponse.json(
       { error: e?.message || "Server error" },
       { status: 500 }
