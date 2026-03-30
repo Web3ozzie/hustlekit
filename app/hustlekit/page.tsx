@@ -1036,10 +1036,10 @@ function Tools() {
   function generateCVCvPDF() {
     if (!generatedCV) return;
 
-    const doc = new jsPDF();
-    const margin = 20;
-    const lineHeight = 6;
-    let y = margin;
+const doc = new jsPDF();
+const margin = 20;
+const lineHeight = 6;
+let y = margin;
 
     const lines = generatedCV.split("\n");
     const [nameLine, addrLine, contactLine, ...rest] = lines;
