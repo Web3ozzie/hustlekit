@@ -28,7 +28,7 @@ export async function POST(req: Request) {
         payment_plan: 156341, // your plan id
         customer: { email },
         redirect_url: `${process.env.NEXT_PUBLIC_APP_URL}/hustlekit?tab=tools`,
-        payment_options: "card, banktransfer, ussd", // <-- here
+        payment_options: "card,banktransfer,ussd,banktransfer_ng,account", // <-- here
       }),
     });
 

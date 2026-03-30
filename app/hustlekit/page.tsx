@@ -20,6 +20,9 @@ import {
 } from "firebase/firestore";
 import { toast } from "react-hot-toast";
 import jsPDF from "jspdf";
+import { setPersistence, browserLocalPersistence } from "firebase/auth";
+
+await setPersistence(auth, browserLocalPersistence);
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // plus your Imports for Investments, Jobs, Tools, Chat, Profile
 
