@@ -26,17 +26,26 @@ await setPersistence(auth, browserLocalPersistence);
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // plus your Imports for Investments, Jobs, Tools, Chat, Profile
 
+type UserState = {
+  uid: string;
+  username: string;
+  hustleId: string;
+  email: string | null;
+  hasToolsSub?: boolean;
+} | null;
+
 function HustleKitInnerPage() {
-  const [user, setUser] = useState<{
-    uid: string;
-    username: string;
-    hustleId: string;
-    email: string | null;
-    hasToolsSub?: boolean;
-  } | null>(null);
-
+  const [user, setUser] = useState<UserState>(null);
   const [subscriptionDoc, setSubscriptionDoc] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState<
+    "investments" | "jobs" | "tools" | "chat" | "profile"
+  >("investments");
+  const [hasToolsSubOverride, setHasToolsSubOverride] = useState(false);
 
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+
+  // Load user + subscription from Firebase
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (firebaseUser) => {
       if (!firebaseUser) {
@@ -61,7 +70,6 @@ function HustleKitInnerPage() {
         hasToolsSub: data?.hasToolsSub ?? false,
       });
 
-      // load tools subscription doc for this user
       const subRef = doc(db, "toolSubs", firebaseUser.uid);
       const subSnap = await getDoc(subRef);
       if (subSnap.exists()) {
@@ -74,19 +82,58 @@ function HustleKitInnerPage() {
     return () => unsub();
   }, []);
 
-  const searchParams = useSearchParams();
-  const tabFromUrl = searchParams.get("tab");
-
-  const [activeTab, setActiveTab] = useState<
-    "investments" | "jobs" | "tools" | "chat" | "profile"
-  >("investments");
-
+  // Sync active tab with ?tab=
   useEffect(() => {
     if (!tabFromUrl) return;
     if (["investments", "jobs", "tools", "chat", "profile"].includes(tabFromUrl)) {
       setActiveTab(tabFromUrl as any);
     }
   }, [tabFromUrl]);
+
+  // Verify Flutterwave payment after redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("status");
+    const tx_ref = params.get("tx_ref");
+    const transaction_id = params.get("transaction_id");
+
+    if (status && tx_ref && transaction_id && user?.uid) {
+      fetch(
+  `/api/ai/verify-flw?status=${status}&tx_ref=${tx_ref}&transaction_id=${transaction_id}&userId=${user.uid}`
+)
+        .then((res) => res.json())
+        .then(async (data) => {
+          if (!data.ok) return;
+
+          setHasToolsSubOverride(true);
+
+          const currentUser = auth.currentUser;
+          if (!currentUser) return;
+
+          const refUser = doc(db, "users", currentUser.uid);
+          const snap = await getDoc(refUser);
+          const udata = snap.data() as any;
+
+          setUser((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  hasToolsSub: udata?.hasToolsSub ?? true,
+                }
+              : prev
+          );
+
+          const subRef = doc(db, "toolSubs", currentUser.uid);
+          const subSnap = await getDoc(subRef);
+          if (subSnap.exists()) {
+            setSubscriptionDoc(subSnap.data());
+          }
+        })
+        .catch((err) => {
+          console.error("Verify error", err);
+        });
+    }
+  }, [user?.uid]);
 
   async function startToolsSub() {
     if (!user?.uid || !user.email) {
@@ -117,7 +164,7 @@ function HustleKitInnerPage() {
     }
   }
 
-  // SINGLE return – everything below stays inside this
+  // SINGLE return – still inside HustleKitInnerPage
   return (
     <div className="min-h-screen bg-black text-white flex flex-col md:flex-row">
       {/* Sidebar */}
@@ -173,7 +220,7 @@ function HustleKitInnerPage() {
         {activeTab === "jobs" && <Jobs />}
 
         {activeTab === "tools" && (
-          user?.hasToolsSub ? (
+          user?.hasToolsSub || hasToolsSubOverride ? (
             <Tools expiresAt={subscriptionDoc?.expiresAt} />
           ) : (
             <div className="p-6 space-y-4">
@@ -209,6 +256,7 @@ function HustleKitInnerPage() {
     </div>
   );
 }
+
 type InvestmentsProps = {
   myHustleId?: string;
   openChatTab?: () => void;
@@ -695,39 +743,56 @@ function Jobs() {
   }, []);
 
   async function addJob() {
-    if (!title || !company) {
-      alert("Fill all fields");
-      return;
-    }
-
-    const newJob = { title, company, location, contact };
-
-    try {
-      await addDoc(collection(db, "jobs"), newJob);
-
-      const querySnapshot = await getDocs(collection(db, "jobs"));
-      const data = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setJobs(data);
-
-      setTitle("");
-      setCompany("");
-      setLocation("");
-      setContact("");
-      setShowForm(false);
-      alert("Job added!");
-    } catch (error) {
-      console.error(error);
-      alert("Error adding job");
-    }
+  if (!title || !company) {
+    alert("Fill all fields");
+    return;
   }
 
-  async function deleteJob(id: string) {
+  if (!auth.currentUser) {
+    alert("You must be logged in to add a job.");
+    return;
+  }
+
+  const newJob = {
+    title,
+    company,
+    location,
+    contact,
+    ownerId: auth.currentUser.uid, // <-- important
+    createdAt: new Date(),
+  };
+
+  try {
+    await addDoc(collection(db, "jobs"), newJob);
+
+    const querySnapshot = await getDocs(collection(db, "jobs"));
+    const data = querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    setJobs(data);
+
+    setTitle("");
+    setCompany("");
+    setLocation("");
+    setContact("");
+    setShowForm(false);
+    alert("Job added!");
+  } catch (error) {
+    console.error(error);
+    alert("Error adding job");
+  }
+}
+
+async function deleteJob(id: string) {
+  try {
     await deleteDoc(doc(db, "jobs", id));
     setJobs((prev) => prev.filter((job) => job.id !== id));
+  } catch (err) {
+    console.error(err);
+    alert("You are not allowed to delete this job.");
   }
+}
 
   return (
     <div className="space-y-6">
@@ -746,7 +811,23 @@ function Jobs() {
           {showForm ? "✖ Cancel" : "➕ Add Job"}
         </button>
       </div>
+{jobs.map((job) => (
+  <div key={job.id} className="border border-gray-800 rounded-lg p-4 mb-3">
+    <h3 className="font-semibold">{job.title}</h3>
+    <p className="text-sm text-gray-300">{job.company}</p>
+    <p className="text-xs text-gray-400">{job.location}</p>
+    <p className="text-xs text-gray-400">{job.contact}</p>
 
+    {auth.currentUser?.uid === job.ownerId && (
+      <button
+        onClick={() => deleteJob(job.id)}
+        className="mt-2 text-xs text-red-400 hover:text-red-500"
+      >
+        Delete
+      </button>
+    )}
+  </div>
+))}
       {/* FORM */}
       {showForm && (
         <div className="mb-4 space-y-3 bg-gray-900/70 p-4 rounded-xl border border-orange-500/30">
@@ -860,6 +941,21 @@ function Tools({ expiresAt }: ToolsProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Treat as expired only if expiresAt exists and is in the past
+  const expired =
+    expiresAt && typeof expiresAt.toMillis === "function"
+      ? expiresAt.toMillis() < Date.now()
+      : false;
+
+  if (expired) {
+    return (
+      <div className="p-4 border border-red-500 rounded">
+        Your 30‑day access has expired. Please renew to unlock tools.
+      </div>
+    );
+  }
+
+
   // BIO
   const [bioInput, setBioInput] = useState("");
   const [generatedBio, setGeneratedBio] = useState("");
@@ -930,7 +1026,7 @@ function Tools({ expiresAt }: ToolsProps) {
   }, []);
 
   // countdown
-  const msLeft = expiresAt ? expiresAt.toMillis() - Date.now() : 0;
+  const msLeft = expiresAt ? new Date(expiresAt).getTime() - Date.now() : 0;
   const isExpired = msLeft <= 0;
   const daysLeft = Math.max(0, Math.floor(msLeft / (1000 * 60 * 60 * 24)));
   const hoursLeft = Math.max(

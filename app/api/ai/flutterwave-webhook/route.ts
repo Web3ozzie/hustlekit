@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/app/lib/firebase";
+import { doc, setDoc, updateDoc } from "firebase/firestore";
 
+await setDoc(doc(db, "toolSubs", userId), {
+  active: true,
+  startedAt: new Date(),
+  expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+});
+
+await updateDoc(doc(db, "users", userId), {
+  hasToolsSub: true,
+});
 export async function POST(req: NextRequest) {
   const secretHash = process.env.FLW_WEBHOOK_HASH;
   const signature = req.headers.get("verif-hash");
