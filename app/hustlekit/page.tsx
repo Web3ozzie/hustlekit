@@ -22,11 +22,12 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export default function HustleKitPage() {
   const [user, setUser] = useState<{
-    uid: string;
-    username: string;
-    hustleId: string;
-    email: string | null;
-  } | null>(null);
+  uid: string;
+  username: string;
+  hustleId: string;
+  email: string | null;
+  hasToolsSub?: boolean;
+} | null>(null);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (firebaseUser) => {
@@ -38,8 +39,7 @@ export default function HustleKitPage() {
       const refUser = doc(db, "users", firebaseUser.uid);
       const snap = await getDoc(refUser);
       const data = snap.data() as any;
-
-     setUser({
+setUser({
   uid: firebaseUser.uid,
   username:
     data?.username ||
@@ -48,6 +48,7 @@ export default function HustleKitPage() {
     "Hustler",
   hustleId: data?.hustleId || "HK-XXXXXX",
   email: firebaseUser.email ?? null,
+  hasToolsSub: data?.hasToolsSub ?? false,
 });
     });
 
