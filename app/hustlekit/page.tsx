@@ -1022,15 +1022,7 @@ function Tools({ expiresAt }: ToolsProps) {
     if (savedPitch) setOutput(savedPitch);
   }, []);
 
-  // countdown
   
-  const isExpired = msLeft <= 0;
-  const daysLeft = Math.max(0, Math.floor(msLeft / (1000 * 60 * 60 * 24)));
-  const hoursLeft = Math.max(
-    0,
-    Math.floor((msLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-  );
-
   async function callAI(tool: string, payload: any) {
     try {
       setLoading(true);
