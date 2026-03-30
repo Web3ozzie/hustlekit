@@ -23,12 +23,12 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export default function HustleKitPage() {
   const [user, setUser] = useState<{
-  uid: string;
-  username: string;
-  hustleId: string;
-  email: string | null;
-  hasToolsSub?: boolean;
-} | null>(null);
+    uid: string;
+    username: string;
+    hustleId: string;
+    email: string | null;
+    hasToolsSub?: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (firebaseUser) => {
@@ -40,17 +40,18 @@ export default function HustleKitPage() {
       const refUser = doc(db, "users", firebaseUser.uid);
       const snap = await getDoc(refUser);
       const data = snap.data() as any;
-setUser({
-  uid: firebaseUser.uid,
-  username:
-    data?.username ||
-    firebaseUser.displayName ||
-    firebaseUser.email?.split("@")[0] ||
-    "Hustler",
-  hustleId: data?.hustleId || "HK-XXXXXX",
-  email: firebaseUser.email ?? null,
-  hasToolsSub: data?.hasToolsSub ?? false,
-});
+
+      setUser({
+        uid: firebaseUser.uid,
+        username:
+          data?.username ||
+          firebaseUser.displayName ||
+          firebaseUser.email?.split("@")[0] ||
+          "Hustler",
+        hustleId: data?.hustleId || "HK-XXXXXX",
+        email: firebaseUser.email ?? null,
+        hasToolsSub: data?.hasToolsSub ?? false,
+      });
     });
 
     return () => unsub();
@@ -70,34 +71,36 @@ setUser({
     }
   }, [tabFromUrl]);
 
-async function startToolsSub() {
-  if (!user?.uid || !user.email) {
-    alert("Please log in with an email account first.");
-    return;
+  async function startToolsSub() {
+    if (!user?.uid || !user.email) {
+      alert("Please log in with an email account first.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/ai/subscribe-tools", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.uid,
+          email: user.email,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.link) {
+        alert(data?.error || "Could not start payment. Please try again.");
+        return;
+      }
+
+      window.location.href = data.link;
+    } catch (err) {
+      console.error(err);
+      alert("Network error. Please try again.");
+    }
   }
 
-  const res = await fetch("/api/ai/subscribe-tools", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      userId: user.uid,
-      email: user.email,
-    }),
-  });
-
-  const data = await res.json();
-  if (!res.ok || !data?.link) {
-    alert(data?.error || "Could not start payment. Please try again.");
-    return;
-  }
-
-  window.location.href = data.link;
-  } catch (err) {
-    console.error(err);
-    alert("Network error. Please try again.");
-  }
-}
-  return (
+    return (
     <div className="min-h-screen bg-black text-white flex flex-col md:flex-row">
       {/* Sidebar */}
       <div className="w-full md:w-64 bg-gray-900 p-4 md:p-5 flex md:block overflow-x-auto md:overflow-visible">
@@ -141,52 +144,52 @@ async function startToolsSub() {
       </div>
 
       {/* Main Content */}
-<div className="flex-1 p-4 md:p-6">
-  {activeTab === "investments" && (
-    <Investments
-      myHustleId={user?.hustleId}
-      openChatTab={() => setActiveTab("chat")}
-    />
-  )}
+      <main className="flex-1 p-4 md:p-6">
+        {activeTab === "investments" && (
+          <Investments
+            myHustleId={user?.hustleId}
+            openChatTab={() => setActiveTab("chat")}
+          />
+        )}
 
-  {activeTab === "jobs" && <Jobs />}
+        {activeTab === "jobs" && <Jobs />}
 
- {activeTab === "tools" && (
-  user?.hasToolsSub ? (
-    <Tools />
-  ) : (
-    <div className="p-6 space-y-4">
-      <h2 className="text-xl font-semibold">Unlock HustleKit Tools</h2>
-      <p className="text-sm text-gray-400">
-        Get access to writing tools, CV, invoice, letter  and more to support your hustles.
-      </p>
-      <ul className="text-sm text-gray-300 list-disc list-inside space-y-1">
-        <li>CV and bio builder</li>
-        <li>Letter and pitch writer</li>
-        <li>Saved templates for quick reuse</li>
-        <li>Profit calculator</li>
-<li>Invoices for your business</li>
-      </ul>
-      <p className="text-sm text-gray-400">
-        ₦1,500 per month. Various payment options.
-      </p>
-      <button
-        onClick={startToolsSub}
-        className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm font-semibold"
-      >
-        Get Access
-      </button>
+        {activeTab === "tools" && (
+          user?.hasToolsSub ? (
+            <Tools />
+          ) : (
+            <div className="p-6 space-y-4">
+              <h2 className="text-xl font-semibold">Unlock HustleKit Tools</h2>
+              <p className="text-sm text-gray-400">
+                Get access to writing tools, CV, invoice, letter and more to support your hustles.
+              </p>
+              <ul className="text-sm text-gray-300 list-disc list-inside space-y-1">
+                <li>CV and bio builder</li>
+                <li>Letter and pitch writer</li>
+                <li>Saved templates for quick reuse</li>
+                <li>Profit calculator</li>
+                <li>Invoices for your business</li>
+              </ul>
+              <p className="text-sm text-gray-400">
+                ₦1,500 per month. Various payment options.
+              </p>
+              <button
+                onClick={startToolsSub}
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm font-semibold"
+              >
+                Get Access
+              </button>
+            </div>
+          )
+        )}
+
+        {activeTab === "chat" && <Chat myHustleId={user?.hustleId} />}
+
+        {activeTab === "profile" && user && <Profile user={user} />}
+        {activeTab === "profile" && !user && <div>Loading...</div>}
+      </main>
     </div>
-  )
-)}
-
-  {activeTab === "chat" && <Chat myHustleId={user?.hustleId} />}
-
-  {activeTab === "profile" && user && <Profile user={user} />}
-  {activeTab === "profile" && !user && <div>Loading...</div>}
-</div>
-</div>
-);
+  );
 }
 
 type InvestmentsProps = {
